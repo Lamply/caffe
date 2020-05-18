@@ -322,7 +322,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 149 (last added: clip_param)
+// LayerParameter next available layer-specific ID: 153 (last added: DenseImage)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -384,6 +384,7 @@ message LayerParameter {
   optional ConvolutionParameter convolution_param = 106;
   optional CropParameter crop_param = 144;
   optional DataParameter data_param = 107;
+  optional DenseImageDataParameter dense_image_data_param = 152;
   optional DropoutParameter dropout_param = 108;
   optional DummyDataParameter dummy_data_param = 109;
   optional EltwiseParameter eltwise_param = 110;
@@ -398,6 +399,7 @@ message LayerParameter {
   optional InfogainLossParameter infogain_loss_param = 116;
   optional InnerProductParameter inner_product_param = 117;
   optional InputParameter input_param = 143;
+  optional InterpParameter interp_param = 149;
   optional LogParameter log_param = 134;
   optional LRNParameter lrn_param = 118;
   optional MemoryDataParameter memory_data_param = 119;
@@ -411,6 +413,7 @@ message LayerParameter {
   optional ReductionParameter reduction_param = 136;
   optional ReLUParameter relu_param = 123;
   optional ReshapeParameter reshape_param = 133;
+  optional ResizeParameter resize_param = 151;
   optional ScaleParameter scale_param = 142;
   optional SigmoidParameter sigmoid_param = 124;
   optional SoftmaxParameter softmax_param = 125;
@@ -421,6 +424,7 @@ message LayerParameter {
   optional ThresholdParameter threshold_param = 128;
   optional TileParameter tile_param = 138;
   optional WindowDataParameter window_data_param = 129;
+  optional ShuffleChannelParameter shuffle_channel_param = 150;
 }
 
 // Message that stores parameters used to apply transformation
@@ -444,6 +448,20 @@ message TransformationParameter {
   optional bool force_color = 6 [default = false];
   // Force the decoded image to have 1 color channels.
   optional bool force_gray = 7 [default = false];
+
+  // Specify the range of scaling factor for doing resizing
+  optional float min_scaling_factor = 8 [default = 1.0];
+  optional float max_scaling_factor = 9 [default = 1.0];
+  // You have to specify background label when using random scale or random rotate
+  optional uint32 background_label = 17 [default = 0];
+  // Specify the angle for doing rotation
+  optional float rotation_angle = 10 [default = 0.0];
+  optional bool contrast_adjustment = 11 [default = false];
+  optional bool smooth_filtering = 12 [default = false];
+  optional bool jpeg_compression = 13 [default = false];
+  optional bool display = 14 [default = false];
+  optional float min_alpha_factor = 15 [default = 1.0];
+  optional float max_alpha_factor = 16 [default = 1.0];
 }
 
 // Message that stores parameters shared by loss layers
@@ -473,6 +491,8 @@ message LossParameter {
   // is not specified, then setting this to false will be equivalent to
   // normalization = BATCH_SIZE to be consistent with previous behavior.
   optional bool normalize = 2;
+  optional bool weight_by_label_freqs = 4 [default = false]; 
+  repeated float class_weighting = 5;
 }
 
 // Messages that store parameters used by individual layer types follow, in
@@ -508,8 +528,8 @@ message ArgMaxParameter {
 
 // Message that stores parameters used by ClipLayer
 message ClipParameter {
-  required float min = 1;
-  required float max = 2;
+  optional float min = 1;       // change to optional, original: required
+  optional float max = 2;       // change to optional, original: required
 }
 
 message ConcatParameter {
@@ -694,6 +714,32 @@ message DataParameter {
   optional uint32 prefetch = 10 [default = 4];
 }
 
+message DenseImageDataParameter {
+  // Specify the data source file.
+  optional string source = 1;
+  // Specify the batch size.
+  optional uint32 batch_size = 2;
+  // The rand_skip variable is for the data layer to skip a few data points
+  // to avoid all asynchronous sgd clients to start at the same point. The skip
+  // point would be set as rand_skip * rand(0,1). Note that rand_skip should not
+  // be larger than the number of keys in the database.
+  optional uint32 rand_skip = 3 [default = 0];
+  // Whether or not ImageLayer should shuffle the list of files at every epoch.
+  optional bool shuffle = 4 [default = false];
+  // It will also resize images if new_height or new_width are not zero.
+  optional uint32 new_height = 5 [default = 0];
+  optional uint32 new_width = 6 [default = 0];
+  // Label gets divided by this factor, to train the encoder architecture of ENet.
+  optional uint32 label_divide_factor = 13 [default = 1];
+  // Specify if the images are color or gray
+  optional bool is_color = 7 [default = true];
+  optional string mean_file = 8;
+  optional string root_folder = 9 [default = ""];
+  optional bool mirror = 10 [default = false];
+  optional uint32 crop_width = 11 [default = 0];
+  optional uint32 crop_height = 12 [default = 0];
+}
+
 message DropoutParameter {
   optional float dropout_ratio = 1 [default = 0.5]; // dropout ratio
 }
@@ -855,6 +901,15 @@ message InnerProductParameter {
   // of the weight matrix. The weight matrix itself is not going to be transposed
   // but rather the transfer flag of operations will be toggled accordingly.
   optional bool transpose = 6 [default = false];
+}
+
+message InterpParameter {
+  optional int32 height = 1 [default = 0]; // Height of output
+  optional int32 width = 2 [default = 0]; // Width of output
+  optional int32 zoom_factor = 3 [default = 1]; // zoom factor
+  optional int32 shrink_factor = 4 [default = 1]; // shrink factor
+  optional int32 pad_beg = 5 [default = 0]; // padding at begin of input
+  optional int32 pad_end = 6 [default = 0]; // padding at end of input
 }
 
 message InputParameter {
@@ -1096,6 +1151,23 @@ message ReshapeParameter {
   //
   optional int32 axis = 2 [default = 0];
   optional int32 num_axes = 3 [default = -1];
+}
+
+message ResizeParameter {// from yangyi
+	optional float resize_ratio = 1 [default = 1.0]; // The resize ratio (equal in Y, X)
+    //optional uint32 width = 2 [default = 0];
+    //optional uint32 height = 3 [default = 0];
+    enum Type {
+      NEAREST = 1;
+      BILINEAR = 2;
+    }
+    // Specify the Norm to use L1 or L2
+    optional Type type = 4 [default = NEAREST];
+    optional bool is_pyramid_test =5[default = false];
+    optional float height=6;
+    optional float width=7;
+    optional float out_height_scale=8;
+    optional float out_width_scale=9;
 }
 
 message ScaleParameter {
@@ -1447,3 +1519,8 @@ message PReLUParameter {
   // Whether or not slope parameters are shared across channels.
   optional bool channel_shared = 2 [default = false];
 }
+
+message ShuffleChannelParameter {
+  optional uint32 group = 1[default = 1]; // The number of group
+}
+
